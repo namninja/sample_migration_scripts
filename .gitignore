@@ -1,0 +1,19 @@
+# Working directories created by the scripts at runtime.
+# These hold exported user/event/purchase data, logs, and run state — never commit them.
+migrate/
+migrate_*/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Local secrets / env
+.env
+*.key
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
