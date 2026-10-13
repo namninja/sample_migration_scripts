@@ -1,6 +1,6 @@
 # Template and Snippet Migration Scripts
 
-Python scripts that copy **snippets** and **Email, SMS, Push and In-App templates** from one Iterable project to another through the public REST API.
+Python scripts that copy **snippets** and **Email, SMS, Push, In-App and Embedded templates** from one Iterable project to another through the public REST API.
 
 | Script | Copies | Source read | Destination write |
 |---|---|---|---|
@@ -9,6 +9,7 @@ Python scripts that copy **snippets** and **Email, SMS, Push and In-App template
 | `bulk_migrate_sms_templates.py` | SMS templates | `GET /api/templates/sms/get` | `POST /api/templates/sms/upsert` |
 | `bulk_migrate_push_templates.py` | Push templates | `GET /api/templates/push/get` | `POST /api/templates/push/upsert` |
 | `bulk_migrate_inapp_templates.py` | In-App templates | `GET /api/templates/inapp/get` | `POST /api/templates/inapp/upsert` |
+| `bulk_migrate_embedded_templates.py` | Embedded templates | `GET /api/templates/embedded/get` | `POST /api/templates/embedded/upsert` |
 
 > **Drag and Drop templates: read this first.** These scripts convert a Drag and Drop template to an **HTML template**. The Drag and Drop design is lost, and the template is edited in the WYSIWYG (HTML) editor afterward.
 >
@@ -64,6 +65,7 @@ The scripts have no command-line arguments. Open the script in your IDE (Spyder,
 | Email | `COPY_SENDER_INFO` | Copies `fromName`, `fromEmail`, `replyToEmail`. Fails the template if the sender is not authorized in the destination. Default `False`. |
 | Email, SMS | `COPY_GA_INFO`, `COPY_LINK_PARAMS` | Copies Google Analytics campaign name and link params. |
 | SMS | `COPY_TRACKING_DOMAIN` | Copies the "shorten and track" domain. Default `False`, because the same domain must exist in the destination. |
+| Embedded | `PLACEMENT_MAP` | `{source placementId: destination placementId}`. Create the placements in the destination first. A template whose placement is not mapped fails before anything is sent. |
 
 ### Snippets
 
@@ -101,8 +103,11 @@ Dry runs write no mapping file.
 - **Images are not re-hosted.** Image URLs keep pointing at the source project's CDN. They keep working, but the files are not in the destination File Manager.
 - **Locales are not handled.** Only the default locale is copied.
 - **Catalogs and data feeds must already exist** in the destination. References are copied as-is and only render once the destination has them.
+- **Embedded placements and campaigns are manual.** The script maps placements but doesn't create them, so create them in the destination first. Embedded campaigns can't be scripted because the campaigns API has no `placementId` field.
+- **Embedded title and body are overwritten on every upsert.** The script always sends both, so edits made to those two fields in the destination are replaced when you re-push.
 - **Not available through the API** (set these manually):
   - Email: "Use data feed alias".
+  - Embedded: data feed options.
   - In-App: some editor options and the "Show in mobile inbox" toggle. The inbox title, subtitle and icon are copied.
 - **Push Open Action.** The script copies `deeplink`. Confirm after your first test migration that the Open Action looks right in the destination.
 - **In-App expiration.** An absolute `expirationDateTime` in the past makes the migrated template expire immediately. The script warns when it sees one.

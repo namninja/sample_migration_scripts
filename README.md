@@ -24,12 +24,13 @@ Every script is configured by editing variables at the top of the file in an IDE
 | Device tokens | Script |
 | Snippets | Script |
 | Email, SMS, Push and In-App templates **built in the HTML editor** | Script |
+| Embedded templates (placements must exist in the destination) | Script |
 | Drag and Drop templates, converted to HTML (WYSIWYG editor) | Script (Drag and Drop design is lost) |
 | Drag and Drop templates kept as Drag and Drop | Manual clone, same org only |
 | Dynamic lists | Manual rebuild |
 | Journeys | Manual rebuild |
 | Campaigns | Manual rebuild |
-| Journey webhooks, data feeds, images, embedded placements, project settings | Manual |
+| Journey webhooks, data feeds, images, embedded placements, embedded campaigns, project settings | Manual |
 | Web Push and WhatsApp templates and campaigns | Not migratable |
 | System events | Not migratable |
 
@@ -67,7 +68,7 @@ Templates built in the HTML editor are not affected. The scripts migrate them as
 | `custom_event_migration.py` | Custom event history | Bulk event export, `/api/events/trackBulk` |
 | `purchase_migration.py` | Purchase history | Bulk export, `/api/commerce/trackPurchase` |
 | `catalog_migration.py` | Catalogs, field mappings and items | Catalog API |
-| `list_migration.py` | Standard, suppression and internal lists and their members | `/api/lists`, `/api/lists/subscribe` |
+| `standard_list_migration.py` | Standard, suppression and internal lists and their members | `/api/lists`, `/api/lists/subscribe` |
 | `devices_migration.py` | Android and iOS device tokens | Bulk user export, `/api/users/registerDeviceToken` |
 
 ### Content: `templates_and_snippets/`
@@ -79,6 +80,7 @@ Templates built in the HTML editor are not affected. The scripts migrate them as
 | `bulk_migrate_sms_templates.py` | SMS templates |
 | `bulk_migrate_push_templates.py` | Push templates |
 | `bulk_migrate_inapp_templates.py` | In-App templates |
+| `bulk_migrate_embedded_templates.py` | Embedded templates (needs a placement mapping) |
 
 See [`templates_and_snippets/README.md`](templates_and_snippets/README.md) for settings, behavior and limitations.
 
@@ -94,7 +96,7 @@ Follow this order. Later steps depend on earlier ones.
 | 4 | **Custom event history** (1 year max) | **Script** `custom_event_migration.py` | Step 3 (users) |
 | 5 | **Purchase event history** (1 year max) | **Script** `purchase_migration.py` | Step 3 (users) |
 | 6 | **Catalogs** | **Script** `catalog_migration.py` | — |
-| 7 | **Static lists** | **Script** `list_migration.py` | Step 3 (users) |
+| 7 | **Static lists** | **Script** `standard_list_migration.py` | Step 3 (users) |
 | 8 | Dynamic lists | Manual rebuild | Step 3 or the data schema, so the fields they filter on exist |
 | 9 | **Snippets** | **Script** `bulk_migrate_snippets.py` | `SnippetsApi` feature flag on in both projects |
 | 10 | Images | Manual | Download from the source and upload to the destination File Manager |
@@ -102,14 +104,14 @@ Follow this order. Later steps depend on earlier ones.
 | 12 | Embedded placements | Manual | — |
 | 13 | Data feeds | Manual | — |
 | 14a | **Templates: Email, SMS, Push, In-App.** HTML-editor templates are migrated as-is. Drag and Drop templates are **converted to HTML** (Option A above). | **Script** `bulk_migrate_*_templates.py` | Steps 2, 6, 9, 10, 13. Email also needs the sender and domain from step 2. |
+| 14c | **Templates: Embedded** | **Script** `bulk_migrate_embedded_templates.py` | Steps 2, 6, 9, 10, and **step 12 (placements)**. Every source placement ID mapped to a destination placement ID. |
 | 14b | **Templates: Drag and Drop that must stay Drag and Drop** (Option B above) | Manual clone, **same org only** | Same prerequisites as 14a. Destination project must be in the same org as the source. |
 | 15 | Reconfigure migrated templates: data feed and image URLs | Manual | Step 14 |
-| 16 | Embedded messaging templates | Manual | Step 12 (placements) |
-| 17 | Journey webhooks | Manual | — |
-| 18 | Journeys | Manual rebuild | Steps 1–17 |
-| 19 | Campaigns | Manual rebuild | Steps 1–17 |
-| 20 | Reconfigure campaigns and journeys: audiences, send-time optimization, webhooks, conversion goals, exit rules | Manual | Steps 17–19 |
-| 21 | Embedded messaging campaigns | Manual | Steps 12 and 16 |
+| 16 | Journey webhooks | Manual | — |
+| 17 | Journeys | Manual rebuild | Steps 1–16 |
+| 18 | Campaigns | Manual rebuild | Steps 1–16 |
+| 19 | Reconfigure campaigns and journeys: audiences, send-time optimization, webhooks, conversion goals, exit rules | Manual | Steps 16–18 |
+| 20 | Embedded messaging campaigns | Manual | Steps 12 and 14c |
 
 ### Notes on specific steps
 
@@ -123,8 +125,9 @@ Follow this order. Later steps depend on earlier ones.
 - **Step 13.** The template scripts don't create data feeds. Create them first, then map the IDs in the script (`DATA_FEED_MAP`).
 - **Step 14a.** A template migrated by script is saved as an HTML template and edited in the WYSIWYG editor afterward. If it was built in the Drag and Drop editor, it loses that design. See [Drag and Drop templates: choose your option first](#drag-and-drop-templates-choose-your-option-first).
 - **Step 14b.** Only for Drag and Drop templates that must stay Drag and Drop, and **only when the destination project is in the same org as the source**. Clone each template by hand, project to project, in the Iterable UI. When a cloned template references a data feed, the platform creates a new copy of the feed in the destination for each clone, so you can end up with duplicate feeds. Review and merge them afterward. If the destination is in a different org, this option is not available. Use step 14a.
-- **Steps 18 to 20.** Journeys and campaigns can't be migrated by script. Rebuild them in the destination using the migrated lists, templates, snippets and catalogs. Journey webhook nodes need to be reconfigured because webhook IDs differ between projects, and conversion goals and exit rules are set again.
-- **Step 21.** Embedded messaging templates and campaigns are rebuilt by hand. The campaigns API has no `placementId` field, so there is no scripted option.
+- **Steps 17 to 19.** Journeys and campaigns can't be migrated by script. Rebuild them in the destination using the migrated lists, templates, snippets and catalogs. Journey webhook nodes need to be reconfigured because webhook IDs differ between projects, and conversion goals and exit rules are set again.
+- **Step 14c.** Embedded templates are migrated by script, but placements are not. Create the placements in the destination first (step 12) and fill in `PLACEMENT_MAP` in the script. A template whose placement isn't mapped is refused before anything is sent, because the API would otherwise leave a blank template behind. Data feeds can't be attached to embedded templates through the API.
+- **Step 20.** Embedded messaging campaigns are rebuilt by hand. The campaigns API has no `placementId` field, so there is no scripted option.
 
 ## Common workflow for the data scripts
 
@@ -158,7 +161,7 @@ Set `start_datetime` to that value and `job_id = None` to continue from where th
 | Data feed duplication | Cloning a template that references a data feed creates a new copy of the feed in the destination each time. |
 | Dynamic lists | Filter definitions can't be migrated by script. Rebuild them. |
 | Journeys and campaigns | Not migratable by script. Rebuild them. Journey webhooks, conversion goals and exit rules are set up again by hand. |
-| Embedded messaging | No scripted path for templates, placements or campaigns. |
+| Embedded messaging | Templates are scripted, but placements and campaigns are manual. The campaigns API has no `placementId` field. |
 | Web Push and WhatsApp | Templates and campaigns can't be migrated. |
 | System events | Can't be exported or replayed. |
 
