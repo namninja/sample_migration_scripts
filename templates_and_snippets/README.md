@@ -90,7 +90,7 @@ Dry runs write no mapping file.
 
 ## Known limitations
 
-- **Drag and Drop is lost.** Templates written through the API are HTML templates. The Drag and Drop editor design is not preserved. Use a UI-based migration tool when that fidelity matters.
+- **Drag and Drop is lost.** Templates written through the API are HTML templates. The Drag and Drop editor design is not preserved. To keep a template as Drag and Drop, clone it manually from project to project in the Iterable UI instead of using these scripts.
 - **Images are not re-hosted.** Image URLs keep pointing at the source project's CDN. They keep working, but the files are not in the destination File Manager.
 - **Locales are not handled.** Only the default locale is copied.
 - **Catalogs and data feeds must already exist** in the destination. References are copied as-is and only render once the destination has them.
