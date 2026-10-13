@@ -10,6 +10,13 @@ Python scripts that copy **snippets** and **Email, SMS, Push and In-App template
 | `bulk_migrate_push_templates.py` | Push templates | `GET /api/templates/push/get` | `POST /api/templates/push/upsert` |
 | `bulk_migrate_inapp_templates.py` | In-App templates | `GET /api/templates/inapp/get` | `POST /api/templates/inapp/upsert` |
 
+> **Drag and Drop templates: read this first.** These scripts convert a Drag and Drop template to an **HTML template**. The Drag and Drop design is lost, and the template is edited in the WYSIWYG (HTML) editor afterward.
+>
+> - **Convert to HTML:** use these scripts. Works for the same org or a different org.
+> - **Keep Drag and Drop:** do not use these scripts. Clone each template manually, project to project, in the Iterable UI. This is **only possible when the destination project is in the same org as the source project.**
+>
+> See the [Drag and Drop options](../README.md#drag-and-drop-templates-choose-your-option-first) in the main README. Templates built in the HTML editor are not affected.
+
 ## Requirements
 
 - Python 3.8+
@@ -90,7 +97,7 @@ Dry runs write no mapping file.
 
 ## Known limitations
 
-- **Drag and Drop is lost.** Templates written through the API are HTML templates. The Drag and Drop editor design is not preserved. To keep a template as Drag and Drop, clone it manually from project to project in the Iterable UI instead of using these scripts.
+- **Drag and Drop is lost.** Templates written through the API are HTML templates. The Drag and Drop editor design is not preserved, and the template is edited in the WYSIWYG editor afterward. To keep a template as Drag and Drop, clone it manually in the Iterable UI instead of using these scripts. That works only when the destination project is in the same org as the source.
 - **Images are not re-hosted.** Image URLs keep pointing at the source project's CDN. They keep working, but the files are not in the destination File Manager.
 - **Locales are not handled.** Only the default locale is copied.
 - **Catalogs and data feeds must already exist** in the destination. References are copied as-is and only render once the destination has them.
