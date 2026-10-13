@@ -79,6 +79,20 @@ dirname = os.path.join(_CONFIG_DIR, "migrate_inapp_templates")
 origin_api_key      = "YOUR_ORIGIN_API_KEY"      # example placeholder - replace
 destination_api_key = "YOUR_DESTINATION_API_KEY" # example placeholder - replace
 
+# ── API REGION (data center) ──────────────────────────────────────────────────
+# Set each side to the data center where THAT project lives: "US" or "EU".
+# They are independent, so US -> EU, EU -> US and same-region migrations all work.
+origin_region      = "US"   # "US" or "EU" - region of the SOURCE project
+destination_region = "US"   # "US" or "EU" - region of the DESTINATION project
+
+# Derived from the two regions above. No edits needed.
+REGION_URLS = {"US": "https://api.iterable.com", "EU": "https://api.eu.iterable.com"}
+for _label, _value in (("origin_region", origin_region), ("destination_region", destination_region)):
+    if str(_value).strip().upper() not in REGION_URLS:
+        raise SystemExit(f'{_label} must be "US" or "EU" (got {_value!r}).')
+origin_base_url      = REGION_URLS[origin_region.strip().upper()]
+destination_base_url = REGION_URLS[destination_region.strip().upper()]
+
 # ── WHAT TO MIGRATE ───────────────────────────────────────────────────────────
 # Source In-App template IDs to migrate
 TEMPLATE_IDS: List[int] = [1234567, 2345678]   # example IDs - replace
@@ -116,7 +130,6 @@ MAX_RETRIES       = 4          # for 429 / 5xx / connection errors
 ###############################################################################
 # Derived settings — no edits needed below this line
 ###############################################################################
-BASE_URL        = "https://api.iterable.com"
 GET_PATH        = "/api/templates/inapp/get"
 UPSERT_PATH     = "/api/templates/inapp/upsert"
 
@@ -166,10 +179,10 @@ def _json_or_none(resp: requests.Response) -> Any:
         return None
 
 
-def api_call(method: str, path: str, api_key: str, **kwargs) -> Tuple[int, Any, str]:
+def api_call(method: str, path: str, api_key: str, base_url: str, **kwargs) -> Tuple[int, Any, str]:
     """Returns (http_status, parsed_json_or_None, raw_text)."""
     time.sleep(REQUEST_DELAY_SEC)
-    resp = session.request(method, BASE_URL + path, headers=_headers(api_key),
+    resp = session.request(method, base_url.rstrip("/") + path, headers=_headers(api_key),
                            timeout=REQUEST_TIMEOUT, **kwargs)
     return resp.status_code, _json_or_none(resp), resp.text
 
@@ -270,7 +283,7 @@ def migrate_one(template_id: int, state: Dict[str, Any]) -> Tuple[str, Dict[str,
     if SKIP_ALREADY_MIGRATED and not DRY_RUN and prior and prior.get("status") == "success":
         return "skipped", prior
 
-    status, src, text = api_call("GET", GET_PATH, origin_api_key, params={"templateId": template_id})
+    status, src, text = api_call("GET", GET_PATH, origin_api_key, origin_base_url, params={"templateId": template_id})
     if status != 200 or not isinstance(src, dict):
         raise MigrationError(f"source GET failed (HTTP {status}): {detail(src, text)}")
 
@@ -283,7 +296,7 @@ def migrate_one(template_id: int, state: Dict[str, Any]) -> Tuple[str, Dict[str,
         print(f"  [dry run] would upsert: {json.dumps(preview, ensure_ascii=False)}")
         return "dry_run", {"name": payload["name"], "warnings": warnings}
 
-    status, body, text = api_call("POST", UPSERT_PATH, destination_api_key, json=payload)
+    status, body, text = api_call("POST", UPSERT_PATH, destination_api_key, destination_base_url, json=payload)
     if status != 200:
         raise MigrationError(
             f"upsert failed (HTTP {status}): {detail(body, text)}. A blank destination template may "

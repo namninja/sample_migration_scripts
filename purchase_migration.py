@@ -35,6 +35,20 @@ dirname = os.path.join(_CONFIG_DIR, "migrate_purchase_events")
 origin_api_key      = ""
 destination_api_key = ""
 
+# ── API REGION (data center) ──────────────────────────────────────────────────
+# Set each side to the data center where THAT project lives: "US" or "EU".
+# They are independent, so US -> EU, EU -> US and same-region migrations all work.
+origin_region      = "US"   # "US" or "EU" - region of the SOURCE project
+destination_region = "US"   # "US" or "EU" - region of the DESTINATION project
+
+# Derived from the two regions above. No edits needed.
+REGION_URLS = {"US": "https://api.iterable.com", "EU": "https://api.eu.iterable.com"}
+for _label, _value in (("origin_region", origin_region), ("destination_region", destination_region)):
+    if str(_value).strip().upper() not in REGION_URLS:
+        raise SystemExit(f'{_label} must be "US" or "EU" (got {_value!r}).')
+origin_base_url      = REGION_URLS[origin_region.strip().upper()]
+destination_base_url = REGION_URLS[destination_region.strip().upper()]
+
 # ── EXPORT JOB ────────────────────────────────────────────────────────────────
 # Set to an existing jobId to resume, or None to start a fresh export.
 job_id: Optional[int] = None
@@ -118,7 +132,6 @@ if not os.path.exists(PAGE_LOG_PATH):
 # API endpoints
 ###############################################################################
 
-iterable_base_url          = "https://api.iterable.com"
 export_start_endpoint      = "/api/export/start"
 export_files_endpoint_tmpl = "/api/export/{job_id}/files"
 track_purchase_endpoint    = "/api/commerce/trackPurchase"
@@ -356,7 +369,7 @@ def start_export() -> int:
         body["endDateTime"] = ed
 
     r = session.post(
-        f"{iterable_base_url}{export_start_endpoint}",
+        f"{origin_base_url}{export_start_endpoint}",
         headers={"Content-Type": "application/json", "Api-Key": origin_api_key, **DEFAULT_HEADERS},
         json=body,
         timeout=LIST_TIMEOUT,
@@ -387,7 +400,7 @@ def poll_until_complete(jid: int):
 
 
 def list_files_page(jid: int, start_after: Optional[str]):
-    url    = f"{iterable_base_url}{export_files_endpoint_tmpl.format(job_id=jid)}"
+    url    = f"{origin_base_url}{export_files_endpoint_tmpl.format(job_id=jid)}"
     params = {"startAfter": start_after} if start_after else {}
     r = session.get(
         url,
@@ -534,7 +547,7 @@ def send_purchase(payload: dict) -> Tuple[bool, str]:
     Returns (success: bool, message: str).
     trackPurchase response on success: {"msg": "...", "code": "Success"}
     """
-    r = session.post(        f"{iterable_base_url}{track_purchase_endpoint}",
+    r = session.post(        f"{destination_base_url}{track_purchase_endpoint}",
         headers={
             "Content-Type": "application/json",
             "Api-Key":       destination_api_key,

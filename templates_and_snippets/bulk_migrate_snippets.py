@@ -84,6 +84,20 @@ dirname = os.path.join(_CONFIG_DIR, "migrate_snippets")
 origin_api_key      = "YOUR_ORIGIN_API_KEY"      # example placeholder - replace
 destination_api_key = "YOUR_DESTINATION_API_KEY" # example placeholder - replace
 
+# ── API REGION (data center) ──────────────────────────────────────────────────
+# Set each side to the data center where THAT project lives: "US" or "EU".
+# They are independent, so US -> EU, EU -> US and same-region migrations all work.
+origin_region      = "US"   # "US" or "EU" - region of the SOURCE project
+destination_region = "US"   # "US" or "EU" - region of the DESTINATION project
+
+# Derived from the two regions above. No edits needed.
+REGION_URLS = {"US": "https://api.iterable.com", "EU": "https://api.eu.iterable.com"}
+for _label, _value in (("origin_region", origin_region), ("destination_region", destination_region)):
+    if str(_value).strip().upper() not in REGION_URLS:
+        raise SystemExit(f'{_label} must be "US" or "EU" (got {_value!r}).')
+origin_base_url      = REGION_URLS[origin_region.strip().upper()]
+destination_base_url = REGION_URLS[destination_region.strip().upper()]
+
 # ── SNIPPET FILTER ────────────────────────────────────────────────────────────
 # Allow-list of snippet NAMES to migrate (case-sensitive). Empty = migrate all.
 SNIPPET_NAMES_TO_MIGRATE: List[str] = ["Footer_Legal", "Header_Logo"]   # example names - replace (or [] for all)
@@ -114,7 +128,6 @@ MAX_RETRIES       = 4          # for 429 / 5xx / connection errors
 ###############################################################################
 # Derived settings — no edits needed below this line
 ###############################################################################
-BASE_URL        = "https://api.iterable.com"
 SNIPPETS_PATH   = "/api/snippets"
 
 MAPPING_PATH    = os.path.join(dirname, "snippet_mapping.json")
@@ -159,10 +172,10 @@ def _json_or_none(resp: requests.Response) -> Any:
         return None
 
 
-def api_call(method: str, path: str, api_key: str, **kwargs) -> Tuple[int, Any, str]:
+def api_call(method: str, path: str, api_key: str, base_url: str, **kwargs) -> Tuple[int, Any, str]:
     """Returns (http_status, parsed_json_or_None, raw_text)."""
     time.sleep(REQUEST_DELAY_SEC)
-    resp = session.request(method, BASE_URL + path, headers=_headers(api_key),
+    resp = session.request(method, base_url.rstrip("/") + path, headers=_headers(api_key),
                            timeout=REQUEST_TIMEOUT, **kwargs)
     return resp.status_code, _json_or_none(resp), resp.text
 
@@ -192,9 +205,9 @@ def log_error(message: str) -> None:
         f.write(f"{datetime.now(timezone.utc).isoformat()}  {message}\n")
 
 
-def fetch_snippets(api_key: str, label: str) -> List[Dict[str, Any]]:
+def fetch_snippets(api_key: str, base_url: str, label: str) -> List[Dict[str, Any]]:
     """All snippets in a project (the list endpoint includes content)."""
-    status, body, text = api_call("GET", SNIPPETS_PATH, api_key)
+    status, body, text = api_call("GET", SNIPPETS_PATH, api_key, base_url)
     if status == 403:
         raise SystemExit(
             f"{label} project: HTTP 403 - {detail(body, text)}. "
@@ -260,14 +273,14 @@ def write_snippet(src: Dict[str, Any], action: str, dest_by_name: Dict[str, Dict
     if action == "update":
         # Address an existing snippet by its numeric ID: unambiguous for any name.
         dest_id = dest_by_name[name]["id"]
-        status, resp, text = api_call("PUT", f"{SNIPPETS_PATH}/{dest_id}", destination_api_key, json=body)
+        status, resp, text = api_call("PUT", f"{SNIPPETS_PATH}/{dest_id}", destination_api_key, destination_base_url, json=body)
         ok = status == 200
     elif name.isdigit():
         # An all-digit identifier would be read as an ID, so create with POST.
-        status, resp, text = api_call("POST", SNIPPETS_PATH, destination_api_key, json={"name": name, **body})
+        status, resp, text = api_call("POST", SNIPPETS_PATH, destination_api_key, destination_base_url, json={"name": name, **body})
         ok = status == 201
     else:
-        status, resp, text = api_call("PUT", f"{SNIPPETS_PATH}/{quote(name, safe='')}", destination_api_key, json=body)
+        status, resp, text = api_call("PUT", f"{SNIPPETS_PATH}/{quote(name, safe='')}", destination_api_key, destination_base_url, json=body)
         ok = status in (200, 201)
 
     if not ok:
@@ -282,8 +295,8 @@ def main() -> None:
 
     os.makedirs(dirname, exist_ok=True)
     print(f"{'DRY RUN - ' if DRY_RUN else ''}Reading snippets from both projects...")
-    source_all = fetch_snippets(origin_api_key, "Origin")
-    dest_by_name = {s["name"]: s for s in fetch_snippets(destination_api_key, "Destination")}
+    source_all = fetch_snippets(origin_api_key, origin_base_url, "Origin")
+    dest_by_name = {s["name"]: s for s in fetch_snippets(destination_api_key, destination_base_url, "Destination")}
 
     selected: List[Dict[str, Any]] = []
     filtered_out = 0
@@ -350,7 +363,7 @@ def main() -> None:
             results[name] = {"srcId": snippet.get("id"), "status": "failed", "error": last_error.get(name, "unknown")}
 
         # Fill in destination IDs the create/update response did not include.
-        final_dest = {s["name"]: s["id"] for s in fetch_snippets(destination_api_key, "Destination")}
+        final_dest = {s["name"]: s["id"] for s in fetch_snippets(destination_api_key, destination_base_url, "Destination")}
         for name, entry in results.items():
             if entry["status"] in ("created", "updated") and entry.get("destId") is None:
                 entry["destId"] = final_dest.get(name)

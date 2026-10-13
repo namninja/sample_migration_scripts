@@ -33,6 +33,20 @@ dirname = os.path.join(_CONFIG_DIR, "migrate_catalogs")
 origin_api_key      = ""
 destination_api_key = ""
 
+# ── API REGION (data center) ──────────────────────────────────────────────────
+# Set each side to the data center where THAT project lives: "US" or "EU".
+# They are independent, so US -> EU, EU -> US and same-region migrations all work.
+origin_region      = "US"   # "US" or "EU" - region of the SOURCE project
+destination_region = "US"   # "US" or "EU" - region of the DESTINATION project
+
+# Derived from the two regions above. No edits needed.
+REGION_URLS = {"US": "https://api.iterable.com", "EU": "https://api.eu.iterable.com"}
+for _label, _value in (("origin_region", origin_region), ("destination_region", destination_region)):
+    if str(_value).strip().upper() not in REGION_URLS:
+        raise SystemExit(f'{_label} must be "US" or "EU" (got {_value!r}).')
+origin_base_url      = REGION_URLS[origin_region.strip().upper()]
+destination_base_url = REGION_URLS[destination_region.strip().upper()]
+
 
 # ── CATALOG FILTER ────────────────────────────────────────────────────────────
 # Allow-list: migrate only these catalog names. Empty list = migrate ALL catalogs.
@@ -92,7 +106,6 @@ UPSERT_TIMEOUT = 60
 ###############################################################################
 # Constants
 ###############################################################################
-iterable_base_url = "https://api.iterable.com"
 
 CATALOG_LIST_ENDPOINT       = "/api/catalogs"
 CATALOG_CREATE_ENDPOINT     = "/api/catalogs/{catalogName}"
@@ -230,7 +243,7 @@ def list_all_catalogs() -> List[str]:
     page_size = 100  # max per docs MCP schema
     while True:
         r = session.get(
-            f"{iterable_base_url}{CATALOG_LIST_ENDPOINT}",
+            f"{origin_base_url}{CATALOG_LIST_ENDPOINT}",
             headers={"Api-Key": origin_api_key, **DEFAULT_HEADERS},
             params={"page": page, "pageSize": page_size},
             timeout=LIST_TIMEOUT,
@@ -262,7 +275,7 @@ def create_catalog(source_name: str) -> bool:
         print(f"  [dry-run] Would create catalog: {_label(source_name)}", flush=True)
         return True
     _acquire_token()
-    url = f"{iterable_base_url}{CATALOG_CREATE_ENDPOINT.format(catalogName=name)}"
+    url = f"{destination_base_url}{CATALOG_CREATE_ENDPOINT.format(catalogName=name)}"
     r = session.post(
         url,
         headers={"Api-Key": destination_api_key, **DEFAULT_HEADERS},
@@ -339,7 +352,7 @@ def build_mappings_for_catalog(name: str) -> Optional[List[Dict[str, Any]]]:
        - Inferred new  → appended at the end
     """
     # ── 1. Fetch current field mappings ───────────────────────────────────────
-    url = f"{iterable_base_url}{CATALOG_MAPPINGS_ENDPOINT.format(catalogName=name)}"
+    url = f"{origin_base_url}{CATALOG_MAPPINGS_ENDPOINT.format(catalogName=name)}"
     r = session.get(
         url,
         headers={"Api-Key": origin_api_key, **DEFAULT_HEADERS},
@@ -389,7 +402,7 @@ def build_mappings_for_catalog(name: str) -> Optional[List[Dict[str, Any]]]:
         page = 1
         while True:
             r = session.get(
-                f"{iterable_base_url}{CATALOG_ITEMS_ENDPOINT.format(catalogName=name)}",
+                f"{origin_base_url}{CATALOG_ITEMS_ENDPOINT.format(catalogName=name)}",
                 headers={"Api-Key": origin_api_key, **DEFAULT_HEADERS},
                 params={"page": page, "pageSize": ITEMS_PAGE_SIZE},
                 timeout=LIST_TIMEOUT,
@@ -497,7 +510,7 @@ def set_field_mappings(source_name: str, mappings_updates: List[Dict[str, Any]])
         print(f"  [dry-run] Would set {len(mappings_updates)} field mappings for: {_label(source_name)}", flush=True)
         return True
     _acquire_token()
-    url = f"{iterable_base_url}{CATALOG_MAPPINGS_ENDPOINT.format(catalogName=dest)}"
+    url = f"{destination_base_url}{CATALOG_MAPPINGS_ENDPOINT.format(catalogName=dest)}"
     r = session.put(
         url,
         headers={"Api-Key": destination_api_key, **DEFAULT_HEADERS},
@@ -525,7 +538,7 @@ def iter_item_pages(catalog_name: str):
     page = 1
     while True:
         r = session.get(
-            f"{iterable_base_url}{CATALOG_ITEMS_ENDPOINT.format(catalogName=catalog_name)}",
+            f"{origin_base_url}{CATALOG_ITEMS_ENDPOINT.format(catalogName=catalog_name)}",
             headers={"Api-Key": origin_api_key, **DEFAULT_HEADERS},
             params={"page": page, "pageSize": ITEMS_PAGE_SIZE},
             timeout=LIST_TIMEOUT,
@@ -568,7 +581,7 @@ def upsert_items_batch(source_name: str, documents: Dict[str, Any]) -> bool:
         print(f"    [dry-run] Would upsert {len(documents)} items to: {_label(source_name)}", flush=True)
         return True
     _acquire_token()
-    url = f"{iterable_base_url}{CATALOG_ITEMS_ENDPOINT.format(catalogName=dest)}"
+    url = f"{destination_base_url}{CATALOG_ITEMS_ENDPOINT.format(catalogName=dest)}"
     r = session.post(
         url,
         headers={"Api-Key": destination_api_key, **DEFAULT_HEADERS},

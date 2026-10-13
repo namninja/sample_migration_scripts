@@ -47,6 +47,20 @@ dirname = os.path.join(_CONFIG_DIR, "migrate_lists")
 origin_api_key      = ""
 destination_api_key = ""
 
+# ── API REGION (data center) ──────────────────────────────────────────────────
+# Set each side to the data center where THAT project lives: "US" or "EU".
+# They are independent, so US -> EU, EU -> US and same-region migrations all work.
+origin_region      = "US"   # "US" or "EU" - region of the SOURCE project
+destination_region = "US"   # "US" or "EU" - region of the DESTINATION project
+
+# Derived from the two regions above. No edits needed.
+REGION_URLS = {"US": "https://api.iterable.com", "EU": "https://api.eu.iterable.com"}
+for _label, _value in (("origin_region", origin_region), ("destination_region", destination_region)):
+    if str(_value).strip().upper() not in REGION_URLS:
+        raise SystemExit(f'{_label} must be "US" or "EU" (got {_value!r}).')
+origin_base_url      = REGION_URLS[origin_region.strip().upper()]
+destination_base_url = REGION_URLS[destination_region.strip().upper()]
+
 # ── PHASE CONTROL ─────────────────────────────────────────────────────────────
 RUN_PHASE_1 = True  # Create destination lists + build list_mapping.json
 RUN_PHASE_2 = True   # Start/poll user export job
@@ -115,7 +129,6 @@ os.makedirs(dirname, exist_ok=True)
 # API endpoints
 ###############################################################################
 
-iterable_base_url          = "https://api.iterable.com"
 lists_endpoint             = "/api/lists"
 subscribe_endpoint         = "/api/lists/subscribe"
 export_start_endpoint      = "/api/export/start"
@@ -230,7 +243,7 @@ def save_state(state: dict):
 def fetch_source_lists() -> List[dict]:
     """GET /api/lists from source, return only the static list types."""
     r = session.get(
-        f"{iterable_base_url}{lists_endpoint}",
+        f"{origin_base_url}{lists_endpoint}",
         headers={"Api-Key": origin_api_key, **DEFAULT_HEADERS},
         timeout=LIST_TIMEOUT,
     )
@@ -255,7 +268,7 @@ def create_dest_list(name: str, description: str, list_type: str) -> int:
     if description:
         body["description"] = description
     r = session.post(
-        f"{iterable_base_url}{lists_endpoint}",
+        f"{destination_base_url}{lists_endpoint}",
         headers={"Content-Type": "application/json", "Api-Key": destination_api_key, **DEFAULT_HEADERS},
         json=body,
         timeout=(POST_CONNECT_TIMEOUT, POST_READ_TIMEOUT),
@@ -341,7 +354,7 @@ def start_export() -> int:
         "onlyFields":   "email,userId,userListIds,emailListIds",
     }
     r = session.post(
-        f"{iterable_base_url}{export_start_endpoint}",
+        f"{origin_base_url}{export_start_endpoint}",
         headers={"Content-Type": "application/json", "Api-Key": origin_api_key, **DEFAULT_HEADERS},
         json=body,
         timeout=LIST_TIMEOUT,
@@ -354,7 +367,7 @@ def start_export() -> int:
 
 
 def list_files_page(jid: int, start_after: Optional[str]) -> Tuple[str, List[dict], Optional[str], bool]:
-    url    = f"{iterable_base_url}{export_files_endpoint_tmpl.format(job_id=jid)}"
+    url    = f"{origin_base_url}{export_files_endpoint_tmpl.format(job_id=jid)}"
     params = {"startAfter": start_after} if start_after else {}
     r = session.get(
         url,
@@ -462,7 +475,7 @@ def _parse_list_ids(raw) -> List[int]:
 def send_subscribe(dest_list_id: int, subscribers: List[dict]):
     """POST /api/lists/subscribe for a batch of subscribers."""
     r = session.post(
-        f"{iterable_base_url}{subscribe_endpoint}",
+        f"{destination_base_url}{subscribe_endpoint}",
         headers={"Content-Type": "application/json", "Api-Key": destination_api_key, **DEFAULT_HEADERS},
         json={
             "listId":                  dest_list_id,

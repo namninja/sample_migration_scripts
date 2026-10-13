@@ -29,7 +29,7 @@ Python scripts that copy **snippets** and **Email, SMS, Push, In-App and Embedde
 
 The scripts have no command-line arguments. Open the script in your IDE (Spyder, PyCharm, VS Code), edit the settings block at the top, and run it.
 
-1. Set `origin_api_key` and `destination_api_key`. A key still set to a `YOUR_...` placeholder is treated as missing and the script stops.
+1. Set `origin_api_key` and `destination_api_key`. A key still set to a `YOUR_...` placeholder is treated as missing and the script stops. Also set `origin_region` and `destination_region` to `"US"` or `"EU"`, matching the data center of each project. They are independent, so US to EU and EU to US both work. Both default to `"US"`.
 2. Set what to migrate (`TEMPLATE_IDS`, or the snippet name filters).
 3. Fill in the mappings (see below).
 4. Run with `DRY_RUN = True` (the default). It reads the source and prints what would be sent, plus every mapping warning. Nothing is written to the destination.

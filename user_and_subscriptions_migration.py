@@ -26,6 +26,20 @@ dirname = os.path.join(_CONFIG_DIR, "migrate_users")
 origin_api_key      = ""
 destination_api_key = ""
 
+# ── API REGION (data center) ──────────────────────────────────────────────────
+# Set each side to the data center where THAT project lives: "US" or "EU".
+# They are independent, so US -> EU, EU -> US and same-region migrations all work.
+origin_region      = "US"   # "US" or "EU" - region of the SOURCE project
+destination_region = "US"   # "US" or "EU" - region of the DESTINATION project
+
+# Derived from the two regions above. No edits needed.
+REGION_URLS = {"US": "https://api.iterable.com", "EU": "https://api.eu.iterable.com"}
+for _label, _value in (("origin_region", origin_region), ("destination_region", destination_region)):
+    if str(_value).strip().upper() not in REGION_URLS:
+        raise SystemExit(f'{_label} must be "US" or "EU" (got {_value!r}).')
+origin_base_url      = REGION_URLS[origin_region.strip().upper()]
+destination_base_url = REGION_URLS[destination_region.strip().upper()]
+
 
 # ── EXPORT JOB ────────────────────────────────────────────────────────────────
 
@@ -396,7 +410,6 @@ def _individual_subscription_path(
 # API endpoints #
 #################
 
-iterable_base_url = "https://api.iterable.com"
 export_start_endpoint = "/api/export/start"
 export_files_endpoint_tmpl = "/api/export/{job_id}/files"
 bulk_update_endpoint = "/api/users/bulkUpdate"
@@ -616,7 +629,7 @@ def start_export() -> int:
             body["onlyFields"] = _only
 
     r = session.post(
-        f"{iterable_base_url}{export_start_endpoint}",
+        f"{origin_base_url}{export_start_endpoint}",
         headers={"Content-Type": "application/json", "Api-Key": origin_api_key, **DEFAULT_HEADERS},
         json=body, timeout=LIST_TIMEOUT
     )
@@ -633,7 +646,7 @@ def start_export() -> int:
     return jid
 
 def list_files_page(job_id: int, start_after: Optional[str]):
-    url = f"{iterable_base_url}{export_files_endpoint_tmpl.format(job_id=job_id)}"
+    url = f"{origin_base_url}{export_files_endpoint_tmpl.format(job_id=job_id)}"
     params = {"startAfter": start_after} if start_after else {}
     r = session.get(url, headers={"Api-Key": origin_api_key, **DEFAULT_HEADERS}, params=params, timeout=LIST_TIMEOUT)
     if not r.ok:
@@ -1021,7 +1034,7 @@ def _post_bulk_update(users_payload: List[dict], api_key: str):
     try:
         body = {"users": users_payload, "createNewFields": create_new_fields}
         return session.post(
-            f"{iterable_base_url}{bulk_update_endpoint}",
+            f"{destination_base_url}{bulk_update_endpoint}",
             json=body,
             headers={"Content-Type": "application/json", "Api-Key": api_key, **DEFAULT_HEADERS},
             timeout=(POST_CONNECT_TIMEOUT, POST_READ_TIMEOUT),
@@ -1035,7 +1048,7 @@ def _post_bulk_update_subscriptions(requests_list: List[dict], api_key: str):
     try:
         body = {"updateSubscriptionsRequests": requests_list}
         return session.post(
-            f"{iterable_base_url}{bulk_update_subs_endpoint}",
+            f"{destination_base_url}{bulk_update_subs_endpoint}",
             json=body,
             headers={"Content-Type": "application/json", "Api-Key": api_key, **DEFAULT_HEADERS},
             timeout=(POST_CONNECT_TIMEOUT, POST_READ_TIMEOUT),
@@ -1299,7 +1312,7 @@ def retry_failed_subscriptions(pairs: List[Tuple[dict, dict]], failed_user_ids: 
 def subscribe_user_to_message_type(identifier: str, message_type_id: int, api_key: str, prefer_email: bool = False, debug: bool = False) -> tuple:
     """Subscribe user to message type using individual API - PATCH method. Returns (success, status_code, response_text)."""
     endpoint = _individual_subscription_path("messageType", message_type_id, identifier, prefer_email)
-    full_url = f"{iterable_base_url}{endpoint}"
+    full_url = f"{destination_base_url}{endpoint}"
     
     try:
         if debug:
@@ -1326,7 +1339,7 @@ def subscribe_user_to_message_type(identifier: str, message_type_id: int, api_ke
 def unsubscribe_user_from_channel(identifier: str, channel_id: int, api_key: str, prefer_email: bool = False, debug: bool = False) -> tuple:
     """Unsubscribe user from channel using individual API - DELETE method. Returns (success, status_code, response_text)."""
     endpoint = _individual_subscription_path("messageChannel", channel_id, identifier, prefer_email)
-    full_url = f"{iterable_base_url}{endpoint}"
+    full_url = f"{destination_base_url}{endpoint}"
     
     try:
         if debug:
@@ -1353,7 +1366,7 @@ def unsubscribe_user_from_channel(identifier: str, channel_id: int, api_key: str
 def unsubscribe_user_from_message_type(identifier: str, message_type_id: int, api_key: str, prefer_email: bool = False, debug: bool = False) -> tuple:
     """Unsubscribe user from message type using individual API - DELETE method. Returns (success, status_code, response_text)."""
     endpoint = _individual_subscription_path("messageType", message_type_id, identifier, prefer_email)
-    full_url = f"{iterable_base_url}{endpoint}"
+    full_url = f"{destination_base_url}{endpoint}"
     
     try:
         if debug:

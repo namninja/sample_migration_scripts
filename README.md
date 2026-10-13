@@ -129,9 +129,20 @@ Follow this order. Later steps depend on earlier ones.
 - **Step 14c.** Embedded templates are migrated by script, but placements are not. Create the placements in the destination first (step 12) and fill in `PLACEMENT_MAP` in the script. A template whose placement isn't mapped is refused before anything is sent, because the API would otherwise leave a blank template behind. Data feeds can't be attached to embedded templates through the API.
 - **Step 20.** Embedded messaging campaigns are rebuilt by hand. The campaigns API has no `placementId` field, so there is no scripted option.
 
+## US and EU data centers
+
+Iterable projects live in either the US or the EU data center, and each uses a different API host. Every script has two settings at the top, one for each side. Enter `"US"` or `"EU"`:
+
+```python
+origin_region      = "US"   # region of the SOURCE project: "US" or "EU"
+destination_region = "EU"   # region of the DESTINATION project: "US" or "EU"
+```
+
+The script picks the API host from each region (US is `https://api.iterable.com`, EU is `https://api.eu.iterable.com`), so you never type a URL. The two settings are independent, so you can migrate US to EU, EU to US, or within one region. Both default to `"US"`. A value other than `"US"` or `"EU"` stops the script with an error. Reads from the source (exports, template and snippet fetches) use the origin region, and writes to the destination use the destination region. If calls fail with authentication errors, check first that each region matches the data center of the project its key belongs to.
+
 ## Common workflow for the data scripts
 
-1. Set `origin_api_key` and `destination_api_key` at the top of the script.
+1. Set `origin_api_key` and `destination_api_key` at the top of the script, and `origin_region` and `destination_region` (`"US"` or `"EU"`) for each project's data center.
 2. Set the project types and `DESTINATION_PREFERRED_IDENTIFIER` where the script has them.
 3. Fill in any ID maps. IDs differ between projects.
 4. Do a small test first: `testSample = 1` and `SAMPLE_FILE = True` for the export-based scripts, or `DRY_RUN = True` for the template and snippet scripts.
