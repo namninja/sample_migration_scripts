@@ -56,7 +56,9 @@ job_id: Optional[int] = None
 # Limit total export files processed (None = process all). Useful for dry-runs.
 testSample: Optional[int] = None
 
-# Date range for the export. Keep to 1 year or less — large windows may truncate.
+# Date range for the export. Iterable's standard for migrations is 1 year or less.
+# You may go further back, but expect proportionally longer runs (roughly 1 million
+# events per hour) and a higher chance of truncation. See the README, "Event history window".
 # Format: "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd", or ISO-8601 with offset.
 start_datetime: Optional[str] = None
 end_datetime:   Optional[str] = None
@@ -809,8 +811,9 @@ def write_summary(jid: int, export_truncated: bool):
     if _max_created_at_str:
         try:
             dt = _parse_export_dt(_max_created_at_str)
-            dt_next    = dt + timedelta(seconds=1)
-            next_start = dt_next.strftime("%Y-%m-%d %H:%M:%S +00:00")
+            # Inclusive: resume AT the newest createdAt seen, so events sharing
+            # that second are not skipped. Those events may be sent twice.
+            next_start = dt.strftime("%Y-%m-%d %H:%M:%S +00:00")
         except Exception:
             next_start = _max_created_at_str
 

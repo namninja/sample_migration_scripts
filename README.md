@@ -17,8 +17,8 @@ Every script is configured by editing variables at the top of the file in an IDE
 | Asset | Method |
 |---|---|
 | Users and subscriptions | Script |
-| Custom event history (up to 1 year) | Script |
-| Purchase event history (up to 1 year) | Script |
+| Custom event history (Iterable's standard is 1 year, see [Event history window](#event-history-window)) | Script |
+| Purchase event history (Iterable's standard is 1 year, see [Event history window](#event-history-window)) | Script |
 | Catalogs and catalog items | Script |
 | Static lists (and suppression / internal lists) | Script |
 | Device tokens | Script |
@@ -35,6 +35,33 @@ Every script is configured by editing variables at the top of the file in an IDE
 | System events | Not migratable |
 
 Anything not listed as a script here must be done manually.
+
+## Read before you run
+
+### These scripts take time
+
+> **Warning:** the user and event scripts are not quick. As a rule of thumb, expect roughly **1 million users or events processed per hour**. Actual speed depends on payload size, API rate limits, the data center, and your network.
+
+Use that figure to plan the work. For example, 50 million events is about 50 hours, and 100 million users is about 100 hours.
+
+- Run long jobs from a machine that won't sleep, lose its network connection or restart partway through. A cloud VM or an always-on workstation is better than a laptop.
+- Every export-based script saves its progress. If a run is interrupted, set `job_id` to the printed job ID and `RESUME_FROM_PAGE_LOG = True` to continue instead of starting over.
+- Test with a small sample first (`testSample = 1` and `SAMPLE_FILE = True`), then check the result in the destination before you start a full run.
+- Plan the cutover around the run time. Anything that happens in the source project after the export starts isn't included.
+
+### Event history window
+
+**Iterable's Professional Services team limits event migrations to 1 year** (custom events and purchases) because of the volume and the time it takes to migrate events. The scripts' default guidance follows that standard.
+
+You are free to go further back if you are running the migration yourself. Set `start_datetime` earlier in `custom_event_migration.py` and `purchase_migration.py`. If you do, be aware of the following:
+
+> **Warning:** a longer window means proportionally more data and more run time, using the 1 million per hour rule of thumb above. Two years of events takes about twice as long as one year.
+>
+> Large export windows may be truncated by Iterable. A window longer than 1 year is much more likely to hit this, so you will probably need several passes using `next_start_datetime` (see [Truncation recovery](#truncation-recovery-events-and-purchases)).
+>
+> Check that the destination has the users first, and run a small test over the extended range before the full run.
+
+Consider migrating the most recent year first, confirming the result, and then adding older history in separate runs. That way the destination is useful sooner, and a failure in the older data doesn't block the cutover.
 
 ## Drag and Drop templates: choose your option first
 
@@ -93,8 +120,8 @@ Follow this order. Later steps depend on earlier ones.
 | 1 | Create fields that use the `nested` data type | Manual | Nested fields can't be created through the UI or API. Ask Iterable Support to create them. |
 | 2 | Configure destination project settings: channels, message types, senders and domains, mobile apps, push credentials, and web push setup if used | Manual | — |
 | 3 | **Users and subscriptions** | **Script** `user_and_subscriptions_migration.py` | Steps 1–2. Channel and message type IDs mapped in the script. |
-| 4 | **Custom event history** (1 year max) | **Script** `custom_event_migration.py` | Step 3 (users) |
-| 5 | **Purchase event history** (1 year max) | **Script** `purchase_migration.py` | Step 3 (users) |
+| 4 | **Custom event history** (1 year standard) | **Script** `custom_event_migration.py` | Step 3 (users) |
+| 5 | **Purchase event history** (1 year standard) | **Script** `purchase_migration.py` | Step 3 (users) |
 | 6 | **Catalogs** | **Script** `catalog_migration.py` | — |
 | 7 | **Static lists** | **Script** `standard_list_migration.py` | Step 3 (users) |
 | 8 | Dynamic lists | Manual rebuild | Step 3 or the data schema, so the fields they filter on exist |
@@ -117,7 +144,7 @@ Follow this order. Later steps depend on earlier ones.
 
 - **Step 1.** Create nested fields before any data is loaded.
 - **Step 3.** Set `SOURCE_PROJECT_TYPE`, `DESTINATION_PROJECT_TYPE` and `DESTINATION_PREFERRED_IDENTIFIER` (`"email"`, `"uuid"` or `"hybrid"`) and the `CHANNEL_ID_MAP` / `MESSAGE_TYPE_ID_MAP` before running.
-- **Steps 4 and 5.** The destination must already have the users, or events and purchases can't be attributed to them. Exports cover at most one year per pass. See [Truncation recovery](#truncation-recovery-events-and-purchases).
+- **Steps 4 and 5.** The destination must already have the users, or events and purchases can't be attributed to them. Iterable's standard is one year of history. You can go further back, but read [Event history window](#event-history-window) first. Expect about 1 million events per hour. See also [Truncation recovery](#truncation-recovery-events-and-purchases).
 - **Step 6.** Field mappings are set before items are loaded, so item data is typed correctly.
 - **Step 8.** Dynamic lists can't be migrated by script. Recreate each one from its filter definition.
 - **Step 9.** Run snippets before templates. A template that references a snippet missing from the destination fails to save.
@@ -155,7 +182,7 @@ Each script writes its logs, state and a `run_summary.json` to a `migrate_*/` fo
 
 ## Truncation recovery (events and purchases)
 
-Event and purchase exports are limited to about one year. If an export is truncated, the run summary contains:
+Large event and purchase export windows may be truncated, and a window longer than one year is much more likely to be. If an export is truncated, the run summary contains:
 
 ```json
 { "next_start_datetime": "2024-07-15 09:23:41 +00:00" }
@@ -163,11 +190,14 @@ Event and purchase exports are limited to about one year. If an export is trunca
 
 Set `start_datetime` to that value and `job_id = None` to continue from where the run stopped.
 
+`next_start_datetime` is the newest `createdAt` the run saw, with no time added. The next export starts **at** that moment, so events that share that second are not skipped, and some may be sent a second time.
+
 ## Limitations
 
 | Area | Limitation |
 |---|---|
-| Event history window | Custom event and purchase exports cover 1 year at most. Use `next_start_datetime` for longer histories. |
+| Event history window | Iterable's standard is 1 year of custom event and purchase history. You can migrate more at your own risk: longer windows take proportionally longer (roughly 1 million events per hour) and are more likely to be truncated. Use `next_start_datetime` to continue. See [Event history window](#event-history-window). |
+| Run time | Users and events migrate at roughly 1 million per hour. Plan for long runs and use the resume settings. See [These scripts take time](#these-scripts-take-time). |
 | Drag and Drop templates | Templates written through the API become HTML templates and lose the Drag and Drop design. To keep Drag and Drop you must clone each template manually, and that works only when the destination project is in the same org as the source. See [Drag and Drop templates: choose your option first](#drag-and-drop-templates-choose-your-option-first). |
 | Data feed duplication | Cloning a template that references a data feed creates a new copy of the feed in the destination each time. |
 | Dynamic lists | Filter definitions can't be migrated by script. Rebuild them. |
