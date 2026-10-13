@@ -1,4 +1,4 @@
-# migration_scripts
+# sample_migration_scripts
 
 Python scripts for migrating data between Iterable projects through the public REST API and the bulk export API. They are for large jobs that are impractical in the UI: user profiles, subscriptions, devices, event history, purchases, lists, catalogs, snippets and templates.
 
